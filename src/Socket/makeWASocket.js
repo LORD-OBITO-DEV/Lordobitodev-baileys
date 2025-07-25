@@ -1,47 +1,68 @@
-import {
-  default as baileys,
+import baileys, {
   useMultiFileAuthState,
-  DisconnectReason,
   fetchLatestBaileysVersion,
   makeCacheableSignalKeyStore,
-  makeInMemoryStore
+  makeInMemoryStore,
+  DisconnectReason
 } from '@whiskeysockets/baileys'
 
-import pino from 'pino'
 import { Boom } from '@hapi/boom'
-import { join } from 'path'
+import Pino from 'pino'
+import fs from 'fs-extra'
+import path from 'path'
+import { downloadSessionFromMega } from '../../lib/utils/mega.js'
 
-const logger = pino({ level: 'silent' }).child({ stream: 'store' })
+const logger = Pino({ level: 'silent' })
 const store = makeInMemoryStore({ logger })
 
+const SESSION_DIR = './sessions'
+
+// Charge depuis MEGA si un lien est trouvé dans process.env.MEGA_URL
+async function loadSessionFromMegaIfNeeded() {
+  const megaUrl = process.env.MEGA_URL
+  if (!megaUrl) return
+
+  console.log('[OBITO] Téléchargement session MEGA...')
+  const buffer = await downloadSessionFromMega(megaUrl)
+  await fs.ensureDir(SESSION_DIR)
+  await fs.writeFile(path.join(SESSION_DIR, 'creds.json'), buffer)
+  console.log('[OBITO] Session MEGA téléchargée et sauvegardée.')
+}
+
 const makeWASocket = async () => {
-  const { state, saveCreds } = await useMultiFileAuthState(join('.', 'sessions'))
+  await loadSessionFromMegaIfNeeded()
+
+  const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR)
   const { version } = await fetchLatestBaileysVersion()
 
   const sock = baileys.default({
     version,
-    logger: pino({ level: 'silent' }),
-    printQRInTerminal: true,
     auth: {
       creds: state.creds,
-      keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'silent' }))
+      keys: makeCacheableSignalKeyStore(state.keys, logger)
     },
-    browser: ['Obito WhatsApp', 'Chrome', '121.0.0.0']
+    printQRInTerminal: true,
+    logger,
+    browser: ['OBITO', 'Chrome', '121.0.0.0']
   })
 
   store.bind(sock.ev)
 
   sock.ev.on('creds.update', saveCreds)
 
-  sock.ev.on('connection.update', ({ connection, lastDisconnect }) => {
-    if (connection === 'close') {
-      const shouldReconnect =
-        (lastDisconnect?.error instanceof Boom &&
-          lastDisconnect.error?.output?.statusCode !== DisconnectReason.loggedOut)
+  sock.ev.on('connection.update', ({ connection, lastDisconnect, qr }) => {
+    if (qr) {
+      console.log('[OBITO] QR reçu. Scanne pour connecter.')
+    }
 
-      if (shouldReconnect) {
-        makeWASocket()
-      }
+    if (connection === 'close') {
+      const code = lastDisconnect?.error?.output?.statusCode
+      const isLogout = code === DisconnectReason.loggedOut
+      if (!isLogout) makeWASocket()
+    }
+
+    if (connection === 'open') {
+      console.log('[OBITO] ✅ Bot connecté.')
     }
   })
 
