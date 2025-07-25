@@ -1,0 +1,31 @@
+{
+  "name": "@lordobitodev/baileys",
+  "version": "1.0.0-obito.304",
+  "description": "Custom Baileys library with MEGA Session & Web Pairing Support",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "files": [
+    "lib/*",
+    "WAProto/*",
+    "engine-requirements.js"
+  ],
+  "keywords": ["whatsapp", "baileys", "mega", "pairing", "obito"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/LORD-OBITO-DEV/lordobitodev-baileys-.git"
+  },
+  "author": "ʟᴏʀᴅ_ᴏʙɪᴛᴏ-ᴅᴇᴠ",
+  "license": "MIT",
+  "dependencies": {
+    "megajs": "1.1.7",
+    "pino": "^9.6.1",
+    "protobufjs": "^7.2.4",
+    "ws": "^8.13.0",
+    "fs-extra": "^11.1.1",
+    "axios": "^1.6.0",
+    "async-mutex": "^0.5.0",
+    "music-metadata": "^11.7.0",
+    "@cacheable/node-cache": "^1.4.0",
+    "@hapi/boom": "^9.1.3"
+  }
+}
