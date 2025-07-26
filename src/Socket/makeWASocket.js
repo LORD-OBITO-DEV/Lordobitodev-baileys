@@ -17,13 +17,46 @@ const store = makeInMemoryStore({ logger })
 
 const SESSION_DIR = './sessions'
 
-// Charge depuis MEGA si un lien est trouvé dans process.env.MEGA_URL
+/**
+ * Convertit une session ID personnalisée au format LORD~OBITO~ID#KEY
+ * en lien MEGA https://mega.nz/file/ID#KEY
+ * @param {string} sessionId
+ * @returns {string|null}
+ */
+function parseSessionIDToMegaLink(sessionId) {
+  try {
+    // Exemple : LORD~OBITO~aVNjiY6Q#IOHcCpQBUsdekcVQKFFZb_tJ-OMBvF17TmClJYho8io
+    if (!sessionId.includes('~')) return null
+    const parts = sessionId.split('~')
+    if (parts.length < 3) return null
+
+    const filePart = parts[2] // aVNjiY6Q#IOHcCpQBUsdekcVQKFFZb_tJ-OMBvF17TmClJYho8io
+    if (!filePart.includes('#')) return null
+
+    // retourne https://mega.nz/file/aVNjiY6Q#IOHcCpQBUsdekcVQKFFZb_tJ-OMBvF17TmClJYho8io
+    return `https://mega.nz/file/${filePart}`
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Charge la session depuis MEGA si MEGA_URL est défini.
+ * Supporte un lien MEGA complet ou une session ID personnalisée.
+ */
 async function loadSessionFromMegaIfNeeded() {
   const megaUrl = process.env.MEGA_URL
   if (!megaUrl) return
 
-  console.log('[OBITO] Téléchargement session MEGA...')
-  const buffer = await downloadSessionFromMega(megaUrl)
+  // Si ce n'est pas un lien http(s), essaie de parser le format personnalisé
+  const megaLink = megaUrl.startsWith('http') ? megaUrl : parseSessionIDToMegaLink(megaUrl)
+  if (!megaLink) {
+    console.error('[OBITO] Format de session MEGA invalide dans MEGA_URL.')
+    return
+  }
+
+  console.log('[OBITO] Téléchargement de la session depuis MEGA...')
+  const buffer = await downloadSessionFromMega(megaLink)
   await fs.ensureDir(SESSION_DIR)
   await fs.writeFile(path.join(SESSION_DIR, 'creds.json'), buffer)
   console.log('[OBITO] Session MEGA téléchargée et sauvegardée.')
