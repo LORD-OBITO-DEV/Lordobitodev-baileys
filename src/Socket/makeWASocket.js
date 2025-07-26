@@ -15,7 +15,7 @@ import { downloadSessionFromMega } from '../../lib/utils/mega.js'
 const logger = Pino({ level: 'silent' })
 const store = makeInMemoryStore({ logger })
 
-const SESSION_DIR = './sessions'
+const SESSIONS_DIR = './sessions'
 
 /**
  * Convertit une session ID personnalisée au format LORD~OBITO~ID#KEY
@@ -25,15 +25,13 @@ const SESSION_DIR = './sessions'
  */
 function parseSessionIDToMegaLink(sessionId) {
   try {
-    // Exemple : LORD~OBITO~aVNjiY6Q#IOHcCpQBUsdekcVQKFFZb_tJ-OMBvF17TmClJYho8io
     if (!sessionId.includes('~')) return null
     const parts = sessionId.split('~')
     if (parts.length < 3) return null
 
-    const filePart = parts[2] // aVNjiY6Q#IOHcCpQBUsdekcVQKFFZb_tJ-OMBvF17TmClJYho8io
+    const filePart = parts[2] // Exemple : aVNjiY6Q#IOHcCpQBUsdekcVQKFFZb_tJ-OMBvF17TmClJYho8io
     if (!filePart.includes('#')) return null
 
-    // retourne https://mega.nz/file/aVNjiY6Q#IOHcCpQBUsdekcVQKFFZb_tJ-OMBvF17TmClJYho8io
     return `https://mega.nz/file/${filePart}`
   } catch {
     return null
@@ -48,7 +46,6 @@ async function loadSessionFromMegaIfNeeded() {
   const megaUrl = process.env.MEGA_URL
   if (!megaUrl) return
 
-  // Si ce n'est pas un lien http(s), essaie de parser le format personnalisé
   const megaLink = megaUrl.startsWith('http') ? megaUrl : parseSessionIDToMegaLink(megaUrl)
   if (!megaLink) {
     console.error('[OBITO] Format de session MEGA invalide dans MEGA_URL.')
@@ -56,16 +53,20 @@ async function loadSessionFromMegaIfNeeded() {
   }
 
   console.log('[OBITO] Téléchargement de la session depuis MEGA...')
-  const buffer = await downloadSessionFromMega(megaLink)
-  await fs.ensureDir(SESSION_DIR)
-  await fs.writeFile(path.join(SESSION_DIR, 'creds.json'), buffer)
-  console.log('[OBITO] Session MEGA téléchargée et sauvegardée.')
+  try {
+    const buffer = await downloadSessionFromMega(megaLink)
+    await fs.ensureDir(SESSIONS_DIR)
+    await fs.writeFile(path.join(SESSIONS_DIR, 'creds.json'), buffer)
+    console.log('[OBITO] Session MEGA téléchargée et sauvegardée.')
+  } catch (error) {
+    console.error('[OBITO] Erreur lors du téléchargement ou de la sauvegarde de la session MEGA:', error)
+  }
 }
 
 const makeWASocket = async () => {
   await loadSessionFromMegaIfNeeded()
 
-  const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR)
+  const { state, saveCreds } = await useMultiFileAuthState(SESSIONS_DIR)
   const { version } = await fetchLatestBaileysVersion()
 
   const sock = baileys.default({
@@ -91,7 +92,12 @@ const makeWASocket = async () => {
     if (connection === 'close') {
       const code = lastDisconnect?.error?.output?.statusCode
       const isLogout = code === DisconnectReason.loggedOut
-      if (!isLogout) makeWASocket()
+      if (!isLogout) {
+        console.log('[OBITO] Connexion fermée, tentative de reconnexion...')
+        makeWASocket()
+      } else {
+        console.log('[OBITO] Déconnecté (logout). Veuillez vous reconnecter manuellement.')
+      }
     }
 
     if (connection === 'open') {
